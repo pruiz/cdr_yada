@@ -1,0 +1,51 @@
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;
+; cdr_yada.conf
+;
+
+[global]
+
+  ; yada db string to connect to
+  dbstr=mysql:localhost::cdr
+  ; username for db (if required)
+  user=cdr
+  ; password for db (if required)
+  pass=cdrpass
+
+  ; maximum number of records to hold in memory
+  ; once this is reached, records are either written to disc or dropped
+  queue_size=500
+  queue_file=/var/asterisk/cdr_yada.queue
+
+  ; this option sets whether or not to playback records from the queue_file
+  ; if set to no, it will not play them back and you will need to manually
+  ; this is primarily used if doing so would cause load issues
+  ;file_playback=yes
+
+  ; table name
+  table=cdr_yada
+
+  ; query to use to insert records
+  ; note: table directive is ignored if query directive is used
+  ; query directive is ignored if userfield parsing is used
+  ;query=
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; userfield parsing
+
+[userfield_parse]
+;  enabled=yes
+
+; userfield columns ufc0 through ufc15
+;[ufc0]
+;  name=col1
+
+;[ufc1]
+;  name=col2
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
