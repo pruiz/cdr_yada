@@ -1,0 +1,222 @@
+
+cdr_yada
+Copyright 2004 - 2006 Matt Griswold, dev/IT
+Released under the GNU General Public License, see COPYING
+Latest version at http://oss.devit.com/voip/asterisk/cdr_yada/
+
+################################################################################
+# description
+
+This is a call detail recording (CDR) module for asterisk and is used to
+store call details to any database yada supports (currently MySQL, Oracle,
+PostgreSQL, SQLite3).
+
+If the database is not available, it can queue records to both memory and disc
+for later playback without worry of losing records.
+
+asterisk: http://asterisk.org/ 
+yada: http://oss.devit.com/yada/
+
+################################################################################
+# custom userfield parsing
+
+This feature, sponsored by voipGATE.com, allows custom cdr fields to be input
+via the SetCDRUserField function.  For example, you could define 3 columns
+(col1, col2, col3) and set any or all of them by calling
+SetCDRUserField(col1=yes, col3=${CALLERID}) and they would be parsed and put
+into the database in their respective columns.
+
+To define the columns, you must set a name=<COLUMN NAME> in a config section refering to the column it's in.  There are 16 possible  columns, ufc0 - ufc15.
+
+[ufc0]
+  name=col1
+
+See example at bottom of this file for more information.
+
+################################################################################
+# installation
+
+Untar this source into your asterisk source directory.  cd into the cdr_yada
+directory, review any variables in the Makefile, and type 'make'.
+
+Copy cdr_yada.so to your asterisk module directory (default
+/usr/lib/asterisk/modules).  Copy cdr_yada.conf.sample as cdr_yada.conf into
+your asterisk config directory (default /etc/asterisk) and edit it.
+
+################################################################################
+# asterisk cli commands
+
+cdr yada connect : 
+	connect to database
+
+cdr yada disconnect : 
+	sync any queued logs and disconnect from database
+
+cdr yada status :
+	display current status
+
+################################################################################
+# config example
+
+;
+; cdr_yada.conf
+;
+
+[global]
+
+  ; yada db string to connect to
+  dbstr=mysql:localhost::cdr
+  ; username for db (if required)
+  user=cdr
+  ; password for db (if required)
+  pass=cdrpass
+
+  ; maximum number of records to hold in memory
+  ; once this is reached, records are either written to disc or dropped
+  queue_size=500
+  queue_file=/var/asterisk/cdr_yada.queue
+
+  ; this option sets whether or not to playback records from the queue_file
+  ; if set to no, it will not play them back and you will need to do it manually
+  ; this is primarily used if doing so would cause load issues
+  ;queue_playback=yes
+
+  ; table name
+  table=cdr_record
+
+  ; query to use to insert records
+  ; note: table directive is ignored if query directive is used
+  ;query=
+
+
+################################################################################
+# example schema (in MySQL)
+
+create table cdr_yada (
+   id int not null,
+   calldate datetime not null default '0000-00-00 00:00:00',
+   accountcode varchar(20) not null default '',
+   src varchar(80) not null default '',
+   dst varchar(80) not null default '',
+   dcontext varchar(80) not null default '',
+   clid varchar(80) not null default '',
+   channel varchar(80) not null default '',
+   dstchannel varchar(80) not null default '',
+   lastapp varchar(80) not null default '',
+   lastdata varchar(80) not null default '',
+   duration int(11) not null default '0',
+   billsec int(11) not null default '0',
+   disposition varchar(45) not null default '',
+   amaflags int(11) not null default '0',
+   uniqueid varchar(32) not null default '',
+   userfield varchar(255) not null default ''
+);
+
+with config directive
+
+  table=cdr_yada
+
+################################################################################
+# example custom schema
+
+create table cdr_yada_cust (
+   id int not null,
+   calldate datetime not null default '0000-00-00 00:00:00',
+   accountcode varchar(20) not null default '',
+   src varchar(80) not null default '',
+   dst varchar(80) not null default '',
+   dcontext varchar(80) not null default '',
+   clid varchar(80) not null default '',
+   channel varchar(80) not null default '',
+   dstchannel varchar(80) not null default '',
+   lastapp varchar(80) not null default '',
+   lastdata varchar(80) not null default '',
+   duration int(11) not null default '0',
+   billsec int(11) not null default '0',
+   disposition varchar(45) not null default '',
+   amaflags int(11) not null default '0'
+);
+
+with config directive
+
+  query=insert into cdr_yada_cust (calldate, clid, src, dst, dcontext, channel, dstchannel, lastapp, lastdata, duration, billsec, disposition, amaflags) values ('?s', ?v, ?v, ?v, ?v, ?v, ?v, ?v, ?v, ?d, ?d, ?v, ?d)
+
+################################################################################
+# example oracle schema and query to make the date work properly
+# (thanks Han van Hulst)
+
+ Name                Null?    Type                                              
+ ------------------- -------- ----------------                                  
+ ID                           NUMBER(38)                                        
+ CALLDATE                     DATE                                              
+ ACCOUNTCODE                  VARCHAR2(20)                                      
+ SRC                          VARCHAR2(80)                                      
+ DST                          VARCHAR2(80)                                      
+ DCONTEXT                     VARCHAR2(80)                                      
+ CLID                         VARCHAR2(80)                                      
+ CHANNEL                      VARCHAR2(80)                                      
+ DSTCHANNEL                   VARCHAR2(80)                                      
+ LASTAPP                      VARCHAR2(80)                                      
+ LASTDATA                     VARCHAR2(80)                                      
+ DURATION                     NUMBER(38)                                        
+ BILLSEC                      NUMBER(38)                                        
+ DISPOSITION                  VARCHAR2(45)                                      
+ AMAFLAGS                     NUMBER(38)                                        
+ UNIQUEID                     VARCHAR2(32)                                      
+ USERFIELD                    VARCHAR2(255)                                     
+
+  query=insert into cdr_yada (id,calldate, clid, src, dst, dcontext, channel, dstchannel, lastapp, lastdata, duration, billsec, disposition, amaflags, accountcode, uniqueid, userfield) values (cdrseq.nextval, to_date('?s','yyyy-mm-dd hh24:mi:ss'), ?v, ?v, ?v, ?v, ?v, ?v, ?v, ?v, ?d, ?d, ?v, ?d, ?v, ?v, ?v)
+
+################################################################################
+# example custom userfield schema (in MySQL)
+
+create table cdr_yada_ufp (
+  id int not null,
+  calldate datetime not null default '0000-00-00 00:00:00',
+  accountcode varchar(20) not null default '',
+  src varchar(80) not null default '',
+  dst varchar(80) not null default '',
+  dcontext varchar(80) not null default '',
+  clid varchar(80) not null default '',
+  channel varchar(80) not null default '',
+  dstchannel varchar(80) not null default '',
+  lastapp varchar(80) not null default '',
+  lastdata varchar(80) not null default '',
+  duration int(11) not null default '0',
+  billsec int(11) not null default '0',
+  disposition varchar(45) not null default '',
+  amaflags int(11) not null default '0',
+  uniqueid varchar(32) not null default '',
+  msg varchar(255),
+  area varchar(255),
+  cid varchar(255),
+);
+
+
+  table=cdr_yada_ufp
+
+[userfield_parse]
+  enabled=yes
+
+[ufc0]
+  name=msg
+
+[ufc1]
+  name=area
+
+[ufc2]
+  name=cid
+
+set in the dialplan with:
+
+SetCDRUserField(msg=test message, area=555, cid=${CALLERID})
+
+################################################################################
+# contact
+
+Questions, comments, bugs, etc.
+
+Matt Griswold <matt@devit.com> 0x6B2E514F
+6CF4 A97B 55A5 BBD6 FF06  6F0B F99D 7C86 6B2E 514F
+http://oss.devit.com/matt/
+

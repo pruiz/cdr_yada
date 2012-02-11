@@ -141,21 +141,6 @@ int ufv_sz;
 char **ufv = 0, *ufvp;
 hash_t *ufp_h = 0;
 
-/******************************************************************************/
-/* cli command help */
-
-static char cdr_yada_connect_help[] =
-  "Usage: cdr yada connect\n"
-  "       Make cdr_yada connect to the database\n";
-
-static char cdr_yada_disconnect_help[] =
-  "Usage: cdr yada disconnect\n"
-  "       Disconnect cdr_yada from database\n";
-
-static char cdr_yada_status_help[] =
-  "Usage: cdr yada status\n"
-  "       Show current status for cdr_yada\n";
-
 /******************************************************************************
  * F U N C T I O N S **********************************************************
  ******************************************************************************/
@@ -290,8 +275,10 @@ static inline void cdr_yada_process_queue()
 /** check for database connection, connecting if able
  */
 
-static inline int db_ping()
+static int db_ping()
 {
+  ast_verbose(VERBOSE_PREFIX_1 "PING..\n");
+
   if(yada && connected)
     return(1);
 
@@ -299,13 +286,15 @@ static inline int db_ping()
     return(0);
 
   if(!yada)
-    {
+  {
+    ast_verbose(VERBOSE_PREFIX_1 "Connecting..\n");
+
     /* init and connect to yada */
     if(!(yada = yada_init(dbstr, 0)))
-      {
+    {
       ast_log(LOG_ERROR, "Failed to initialize yada: %s\n", strerror(errno));
       return(0);
-      }
+    }
 
     /* prepare insert */
     if(query == DEFAULT_QUERY)
@@ -314,13 +303,13 @@ static inline int db_ping()
       stmt_ins = yada->yprepare(yada, query, 0);
 
     if(!stmt_ins)
-      {
+    {
       ast_log(LOG_ERROR, "Failed to prepare insert: %s\n", yada->errmsg);
       yada->destroy(yada);
       yada = 0;
       return(0);
-      }
     }
+  }
 
   /* connect and check for queued logs */
   if(!yada->connect(yada, user, pass))
@@ -370,84 +359,139 @@ static inline void db_destroy()
 /** cli to connect to database
  */
 
-static int cdr_yada_connect(int fd, int argc, char *argv[])
+static char *cdr_yada_connect(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
-  opt_nodb = 0;
+  static const char* const choices[] = { "cdr", "yada", "connect", NULL };
 
+  switch (cmd) {
+    case CLI_INIT:
+      e->command = "cdr yada connect";
+      e->usage =
+        "Usage: cdr yada connect\n"
+        "       Make cdr_yada connect to the database\n";
+        return NULL;
 
-  if(yada && connected)
-    {
-    ast_cli(fd, "cdr_yada: database allready connected\n");
-    return(RESULT_SUCCESS);
-    }
+    case CLI_GENERATE:
+      if (a->pos > e->args)
+        return NULL;
+      return ast_cli_complete(a->word, choices, a->n);
 
-  if(!db_ping())
-    {
-    ast_cli(fd, "cdr_yada: unable to connect to database: %s\n", yada->errmsg);
-    return(RESULT_FAILURE);
-    }
+    default:
+      // we are guaranteed to be called with argc >= e->args;
+      if (a->argc > e->args + 1) // we accept one extra argument
+       return CLI_SHOWUSAGE;
 
-  ast_cli(fd, "cdr_yada: database connected\n");
-  return(RESULT_SUCCESS);
+      if(yada && connected)
+      {
+        ast_cli(a->fd, "cdr_yada: database allready connected\n");
+        return (CLI_SUCCESS);
+      }
+
+      opt_nodb = 0;
+
+      if(!db_ping())
+      {
+        char *errmsg = yada != NULL ? yada->errmsg : "unknown";
+        ast_cli(a->fd, "cdr_yada: unable to connect to database: %s\n", errmsg);
+        return (CLI_FAILURE);
+      }
+
+      ast_cli(a->fd, "cdr_yada: database connected\n");
+      //ast_cli(a->fd, "done this well for %s\n", e->args[argc-1]);
+      return (CLI_SUCCESS);
+   }
 }
 
 /******************************************************************************/
 /** cli to disconnect to database
  */
 
-static int cdr_yada_disconnect(int fd, int argc, char *argv[])
+static char *cdr_yada_disconnect(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
-  opt_nodb = 1;
+  static const char *const choices[] = { "cdr", "yada", "disconnect", NULL };
 
+  switch (cmd) {
+    case CLI_INIT:
+      e->command = "cdr yada disconnect";
+      e->usage =
+        "Usage: cdr yada disconnect\n"
+        "       Disconnect cdr_yada from database\n";
+        return NULL;
 
-  if(!yada || !connected)
-    {
-    ast_cli(fd, "cdr_yada: database is not connected\n");
-    return(RESULT_SUCCESS);
-    }
+    case CLI_GENERATE:
+      if (a->pos > e->args)
+        return NULL;
+      return ast_cli_complete(a->word, choices, a->n);
 
-  db_disco();
+    default:
 
-  ast_cli(fd, "cdr_yada: database disconnected\n");
-  return(RESULT_SUCCESS);
+      if(!yada || !connected)
+      {
+        ast_cli(a->fd, "cdr_yada: database is not connected\n");
+        return (CLI_SUCCESS);
+      }
+
+      opt_nodb = 1;
+
+      db_disco();
+
+      ast_cli(a->fd, "cdr_yada: database disconnected\n");
+      return (CLI_SUCCESS);
+  }
 }
 
 /******************************************************************************/
 /** cli to get status
  */
 
-static int cdr_yada_status(int fd, int argc, char *argv[])
+static char *cdr_yada_status(struct ast_cli_entry *e, int cmd, struct ast_cli_args *a)
 {
   int ctime = time(0) - act_time;
+  static const char *const choices[] = { "cdr", "yada", "status", NULL };
 
-  
-  ast_cli(fd, "cdr_yada %s\n", rev);
+   switch (cmd) {
+    case CLI_INIT:
+      e->command = "cdr yada status";
+      e->usage =
+        "Usage: cdr yada status\n"
+        "       Show current status for cdr_yada\n";
+        return NULL;
 
-  if(connected)
-    {
-    ast_cli(fd, "Connected to '%s'", dbstr);
-    if(user)
-      ast_cli(fd, " as '%s'", user);
-    }
-  else
-    ast_cli(fd, "Not connected");
+    case CLI_GENERATE:
+      if (a->pos > e->args)
+        return NULL;
+      return ast_cli_complete(a->word, choices, a->n);
 
-  if(ctime > 86400)
-    ast_cli(fd, " for %dd%dh%dm%ds.\n", ctime / 86400, (ctime % 86400) / 3600,
-                                        (ctime % 3600) / 60, ctime % 60);
-  else if(ctime > 3600)
-    ast_cli(fd, " for %dh%dm%ds.\n", ctime / 3600, (ctime % 3600) / 60,
-                                     ctime % 60);
-  else if(ctime > 60)
-    ast_cli(fd, " for %dm%ds.\n", ctime / 60, ctime % 60);
-  else
-    ast_cli(fd, " for %ds.\n", ctime);
-
-  ast_cli(fd, "%d of %d records queued, %d errors\n", queue_cnt, queue_size,
-                                                      error_cnt);
-  ast_cli(fd, "queue_file is %s\n", queue_file ? queue_file : "not set");
-  ast_cli(fd, "\n");
-  return(RESULT_SUCCESS);
+    default:
+ 
+      ast_cli(a->fd, "cdr_yada %s\n", rev);
+    
+      if(connected)
+      {
+        ast_cli(a->fd, "Connected to '%s'", dbstr);
+        if(user)
+          ast_cli(a->fd, " as '%s'", user);
+      }
+      else
+        ast_cli(a->fd, "Not connected");
+    
+      if(ctime > 86400)
+        ast_cli(a->fd, " for %dd%dh%dm%ds.\n", ctime / 86400, (ctime % 86400) / 3600,
+                                            (ctime % 3600) / 60, ctime % 60);
+      else if(ctime > 3600)
+        ast_cli(a->fd, " for %dh%dm%ds.\n", ctime / 3600, (ctime % 3600) / 60,
+                                         ctime % 60);
+      else if(ctime > 60)
+        ast_cli(a->fd, " for %dm%ds.\n", ctime / 60, ctime % 60);
+      else
+        ast_cli(a->fd, " for %ds.\n", ctime);
+    
+      ast_cli(a->fd, "%d of %d records queued, %d errors\n", queue_cnt, queue_size,
+                                                          error_cnt);
+      ast_cli(a->fd, "queue_file is %s\n", queue_file ? queue_file : "not set");
+      ast_cli(a->fd, "\n");
+      return (CLI_SUCCESS);
+  }
 }
 
 /******************************************************************************/
@@ -499,7 +543,7 @@ static inline int grow_ufv(size_t sz)
 
 static char** parse_uf(char *userfield)
 {
-  int idx = -1, len;
+  size_t idx = -1, len;
   char *ptr, *start;
   char *ufvp;
 
@@ -537,7 +581,7 @@ static char** parse_uf(char *userfield)
 
     case('='):
       /* get index of variable */
-      if((idx = (int)hash_get(ufp_h, start, ptr - start) - 1) == -1)
+      if((idx = (size_t)hash_get(ufp_h, start, ptr - start) - 1) == -1)
         {
         ast_log(LOG_WARNING, "Skipping unknown variable starting at %s\n",
          start);
@@ -574,15 +618,15 @@ static char** parse_uf(char *userfield)
 
 static int cdr_yada_ufp_log(struct ast_cdr *cdr)
 {
-  struct tm tm;
+  struct ast_tm tm;
   static char timestr[128];
   char *qstr;
 
 
   ast_mutex_lock(&cdr_yada_lock);
 
-  ast_localtime(&cdr->start.tv_sec, &tm, NULL);
-  strftime(timestr, 128, DATE_FORMAT, &tm);
+  ast_localtime(&cdr->start, &tm, NULL);
+  ast_strftime(timestr, 128, DATE_FORMAT, &tm);
 
   /* parse userfield into vars */
   if(!parse_uf(cdr->userfield))
@@ -653,15 +697,15 @@ static int cdr_yada_ufp_log(struct ast_cdr *cdr)
 
 static int cdr_yada_log(struct ast_cdr *cdr)
 {
-  struct tm tm;
+  struct ast_tm tm;
   static char timestr[128];
   char *qstr;
 
 
   ast_mutex_lock(&cdr_yada_lock);
 
-  ast_localtime(&cdr->start.tv_sec, &tm, NULL);
-  strftime(timestr, 128, DATE_FORMAT, &tm);
+  ast_localtime(&cdr->start, &tm, NULL);
+  ast_strftime(timestr, 128, DATE_FORMAT, &tm);
 
   /* try to write to db */
   if(db_ping())
@@ -717,31 +761,10 @@ static int cdr_yada_log(struct ast_cdr *cdr)
 /******************************************************************************/
 /* cli definitions */
 
-static struct ast_cli_entry cdr_yada_cli_connect =
-{
-  { "cdr", "yada", "connect", NULL },
-  cdr_yada_connect,
-  "Connect database from cdr_yada",
-  cdr_yada_connect_help,
-  NULL
-};
-
-static struct ast_cli_entry cdr_yada_cli_disconnect =
-{
-  { "cdr", "yada", "disconnect", NULL },
-  cdr_yada_disconnect,
-  "Disconnect database from cdr_yada",
-  cdr_yada_disconnect_help,
-  NULL
-};
-
-static struct ast_cli_entry cdr_yada_cli_status =
-{
-  { "cdr", "yada", "status", NULL },
-  cdr_yada_status,
-  "Show current status of cdr_yada",
-  cdr_yada_status_help,
-  NULL
+static struct ast_cli_entry cdr_yada_cmds[] = {
+	AST_CLI_DEFINE(cdr_yada_connect, "Connect database from cdr_yada"),
+	AST_CLI_DEFINE(cdr_yada_disconnect, "Disconnect database from cdr_yada"),
+	AST_CLI_DEFINE(cdr_yada_status, "Show current status of cdr_yada")
 };
 
 /******************************************************************************/
@@ -750,7 +773,8 @@ static struct ast_cli_entry cdr_yada_cli_status =
 
 static inline int ufp_init(struct ast_config *cfg)
 {
-  int i, idx, csz, vsz;
+  size_t idx;
+  int i, csz, vsz;
   char *new, ufc[6];
   char *clist = 0, *vlist = 0, *clp, *vlp;
   const char *colname;
@@ -870,9 +894,10 @@ static int cdr_yada_load(void)
   struct ast_variable *var;
   const char *tmp;
   ast_cdrbe logger;
+  struct ast_flags config_flags = { CONFIG_FLAG_WITHCOMMENTS | CONFIG_FLAG_NOCACHE };
 
 
-  if(!(cfg = ast_config_load(config)))
+  if(!(cfg = ast_config_load(config, config_flags)))
     {
     ast_log(LOG_WARNING, "Aborting: failed to load config: %s\n", config);
     return(AST_MODULE_LOAD_DECLINE);
@@ -982,9 +1007,7 @@ static int cdr_yada_load(void)
     errjmp("Failed to register cdr_yada\n");
 
   /* register cli */
-  if(ast_cli_register(&cdr_yada_cli_connect) ||
-     ast_cli_register(&cdr_yada_cli_disconnect) ||
-     ast_cli_register(&cdr_yada_cli_status))
+  if (ast_cli_register_multiple(cdr_yada_cmds, ARRAY_LEN(cdr_yada_cmds)))
     errjmp("Failed to register cli 'connect'\n");
 
   ast_config_destroy(cfg);
@@ -1008,9 +1031,7 @@ int cdr_yada_unload(void)
   /* destroy yada */
   db_destroy();
 
-  ast_cli_unregister(&cdr_yada_cli_connect);
-  ast_cli_unregister(&cdr_yada_cli_disconnect);
-  ast_cli_unregister(&cdr_yada_cli_status);
+  ast_cli_unregister_multiple(cdr_yada_cmds, ARRAY_LEN(cdr_yada_cmds));
 
   ast_cdr_unregister(name);
   return(RESULT_SUCCESS);

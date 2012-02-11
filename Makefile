@@ -14,8 +14,8 @@ YADA_PATH=/usr/local
 UFP_LDADD=hash/hash.o hash/bufkey.o
 
 CC=gcc
-LD=gcc -shared -Xlinker -x
-CFLAGS=-Wall -g
+LD=gcc -shared -Xlinker -x -g3 -ggdb3
+CFLAGS=-Wall -g3 -ggdb3 -O0
 CPPFLAGS=$(DEFINES) $(INCLUDES)
 LDFLAGS=-L$(YADA_PATH)/lib
 
